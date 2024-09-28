@@ -22,10 +22,10 @@ split_names: list[str] = [
 current_download_info_dir: Path = Path("./current_download_info")
 
 
-def get_existing_ytids(data_dir: str) -> list[str]:
-    print(f"Checking how many files are under {data_dir}")
+def get_existing_ytids(split_dir: Path) -> list[str]:
+    print(f"Checking how many files are under {split_dir}")
 
-    command: str = f"ls -1r {data_dir} | wc -l"
+    command: str = f"ls -1r {split_dir} | wc -l"
     result: CompletedProcess = subprocess.run(
         command, shell=True, capture_output=True, text=True
     )
@@ -40,7 +40,7 @@ def get_existing_ytids(data_dir: str) -> list[str]:
     # Execute the command and capture the output
     # grep command to only fetch the IDs of the file
     # matches only the ID part of any file with this format: "ID_dd.d-dd.d.wav"
-    command: str = f"ls -1R {data_dir} | grep -o -P '.*(?=_\d+\.\d+[-_]\d+\.\d.wav)'"
+    command: str = f"ls -1R {split_dir} | grep -o -P '.*(?=_\d+\.\d+[-_]\d+\.\d.wav)'"
     result: CompletedProcess = subprocess.run(
         command, shell=True, capture_output=True, text=True
     )
@@ -55,7 +55,7 @@ def get_existing_ytids(data_dir: str) -> list[str]:
     # Split the output into lines
     existing_ytids: list[str] = output.strip().split("\n")
     # print(f"{existing_ytids=}")
-    print(f"Found {len(existing_ytids)} existing wav files under {data_dir}.")
+    print(f"Found {len(existing_ytids)} existing wav files under {split_dir}.")
     return existing_ytids
 
 
@@ -93,16 +93,27 @@ if __name__ == "__main__":
         debugpy.wait_for_client()
         print(f"Waiting for debugger to attach on {PORT}")
 
+    data_dir : Path = Path(args.data_dir)
+    data_dir.mkdir(exist_ok=True)
+
+    split_dir : Path = data_dir / Path(args.split)
+    split_dir.mkdir(exist_ok=True)
+
+    cache_dir : Path = Path(args.cache_dir)
+    cache_dir.mkdir(exist_ok=True)
+
     csvDownloader: CsvDownloader = CsvDownloader(args.split, args.cache_dir)
     print("Loading CSVs...")
     meta_df: DataFrame = csvDownloader.load_segment_csv_url()
     class_mapping_df: DataFrame = csvDownloader.load_class_mapping_csv()
 
     print("Fetching existing IDs...")
-    existing_ytids: list[str] = get_existing_ytids(args.data_dir)
+    existing_ytids: list[str] = get_existing_ytids(split_dir)
+
+    # make the download info dir 
+    current_download_info_dir.mkdir(exist_ok=True)
 
     # Read the exclusions file
-
     exclusion_ids_file: Path = Path(args.exclusion_ids_file)
 
     if not exclusion_ids_file.exists():
@@ -110,31 +121,35 @@ if __name__ == "__main__":
         exclusion_ids_file.touch()
 
     with open(str(exclusion_ids_file), "r") as f:
-        exclusions: list[str] = f.readlines()
+        excluded_files: list[str] = f.readlines()
+    
+    print(f"Found {len(excluded_files)} file exclusions")
 
     # split meta_df into n_splits
     meta_splits : list[DataFrame] = np.array_split(meta_df, args.n_splits)
-    chosen_df : DataFrame = meta_splits[args.split_idx]
+    split_df : DataFrame = meta_splits[args.split_idx]
 
     # write a file with the ids to download 
 
-    # make the download info dir 
-    current_download_info_dir.mkdir(exist_ok=True)
-
     print(f"Current split index is {args.split_idx} out of {args.n_splits}")
-    print(f"Proceeding to download {len(chosen_df)} files")
+    print(f"Proceeding to download {len(split_df)} files")
 
     with open(current_download_info_dir / Path("split_total_ytids.txt"), "w") as f:
-        f.write("\n".join(chosen_df["YTID"]))
+        f.write("\n".join(split_df["YTID"]))
     
     with open(current_download_info_dir / Path("split_current_ytids.txt"), "w") as f:
-        f.write("")
+        f.write("\n".join(existing_ytids))
     
-    print(f"Found {len(exclusions)} file exclusions")
+    print("Filtering out for already downloaded YTIds")
+    # already_downloaded_from_split : list[str] = chosen_df["YTID"]()
+    filtered_split_df : pd.DataFrame = split_df[~split_df["YTID"].isin(existing_ytids) & ~split_df["YTID"].isin(excluded_files)]
+    # assert len(filtered_split_df) + len(existing_ytids) == len(split_df), "Length of filtered dataframe plus existing files should sum up to original length of split dataframe"
+    print(f"Found {len(excluded_files)} file exclusions")
+    print(f"Downloading {len(filtered_split_df)} files")
     # self, num_jobs : int, metadata_df: pd.DataFrame, class_labels_df : pd.DataFrame, download_dir: Path, sleep_amount: int
     multi_part_downloader: MultiPartDownloader = MultiPartDownloader(
-        args.n_jobs, meta_df, class_mapping_df, args.data_dir,
-        args.sleep_amount, current_download_info_dir
+        args.n_jobs, filtered_split_df, class_mapping_df, split_dir,
+        args.sleep_amount, current_download_info_dir, len(split_df), excluded_files, existing_ytids
     )
 
     multi_part_downloader.init_multipart_download()
