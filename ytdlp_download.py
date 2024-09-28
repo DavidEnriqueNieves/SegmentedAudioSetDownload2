@@ -31,7 +31,7 @@ def download_audio_section(
     start_time: int,
     end_time: int,
     dwnld_paths: list[Path],
-    codec_type: str = ".wav",
+    codec_type: str = "wav",
     quiet: bool = True,
 ) -> tuple[int, Optional[Exception]]:
 
@@ -66,15 +66,15 @@ def download_audio_section(
             if len(dwnld_paths) > 1:
                 for path in dwnld_paths[1:]:
                     shutil.copy(
-                        dwnld_paths[0].with_suffix(codec_type),
-                        path.with_suffix(codec_type),
+                        dwnld_paths[0].with_suffix(f".{codec_type}"),
+                        path.with_suffix(f".{codec_type}"),
                     )
             return (retcode, None)
 
         except Exception as e:
             # raise e
             ex = e
-            traceback.print_exc()
+            # traceback.print_exc()
             # NOTE: the lack of exception need not imply the video downloaded successfully
             # print("No errors")
             return (1, e)
