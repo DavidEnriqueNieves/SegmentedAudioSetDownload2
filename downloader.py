@@ -23,7 +23,7 @@ split_names: list[str] = [
 current_download_info_dir: Path = Path("./current_download_info")
 
 
-def get_existing_ytids(split_dir: Path) -> list[str]:
+def get_existing_ytids(split_dir: Path) -> set[str]:
     print(f"Checking how many files are under {split_dir}")
 
     command: str = f"ls -1r {split_dir} | wc -l"
@@ -54,7 +54,7 @@ def get_existing_ytids(split_dir: Path) -> list[str]:
     output: str = result.stdout
 
     # Split the output into lines
-    existing_ytids: list[str] = output.strip().split("\n")
+    existing_ytids: list[str] = set(output.strip().split("\n"))
     # print(f"{existing_ytids=}")
     print(f"Found {len(existing_ytids)} existing wav files under {split_dir}.")
     return existing_ytids
@@ -68,6 +68,16 @@ def get_excluded_ytids(exclusion_ids_file) -> list[str]:
     with open(str(exclusion_ids_file), "r") as f:
         excluded_files: list[str] = f.readlines()
     return excluded_files
+
+def args_checks(args : Namespace):
+    assert args.split in split_names, f"Invalid split name: {args.split}"
+    assert args.n_splits >= 1, "Number of splits must be at least 1"
+    assert args.split_idx >= 0, "Split index must be at least 0"
+    assert args.n_jobs >= 1, "Number of jobs must be at least 1"
+    assert args.sleep_amount >= 0, "Sleep amount must be at least 0"
+    assert (
+        args.split_idx < args.n_splits
+    ), "Split index must be less than the number of splits"
 
 if __name__ == "__main__":
 
@@ -85,14 +95,8 @@ if __name__ == "__main__":
 
     args: Namespace = argparser.parse_args()
 
-    assert args.split in split_names, f"Invalid split name: {args.split}"
-    assert args.n_splits >= 1, "Number of splits must be at least 1"
-    assert args.split_idx >= 0, "Split index must be at least 0"
-    assert args.n_jobs >= 1, "Number of jobs must be at least 1"
-    assert args.sleep_amount >= 0, "Sleep amount must be at least 0"
-    assert (
-        args.split_idx < args.n_splits
-    ), "Split index must be less than the number of splits"
+    # performs sanity checks for our arguments
+    args_checks(args)
 
     if args.debug:
         print(f"args={args}")
@@ -114,7 +118,10 @@ if __name__ == "__main__":
 
     csvDownloader: CsvDownloader = CsvDownloader(args.split, args.cache_dir)
     print("Loading CSVs...")
-    meta_df: DataFrame = csvDownloader.load_segment_csv_url()
+    
+    # Load the metadata and class mapping CSV
+    # for the metadata, only load the rows of the split that we need
+    split_df: DataFrame = csvDownloader.load_segment_csv_url(args.n_splits, args.split_idx, CsvDownloader.split_quantities[args.split])
     class_mapping_df: DataFrame = csvDownloader.load_class_mapping_csv()
 
     print("Fetching existing IDs...")
@@ -130,10 +137,6 @@ if __name__ == "__main__":
     
     print(f"Found {len(excluded_files)} file exclusions")
 
-    # split meta_df into n_splits
-    meta_splits : list[DataFrame] = np.array_split(meta_df, args.n_splits)
-    split_df : DataFrame = meta_splits[args.split_idx]
-
     # write a file with the ids to download 
 
     print(f"Current split index is {args.split_idx} out of {args.n_splits}")
@@ -147,32 +150,16 @@ if __name__ == "__main__":
     
     print("Filtering out for already downloaded YTIds")
 
-    total_ytfiles : list[str] = []
-
-    # Iterate through each row in the dataframe
-    start : float = time.time()
-    for index, row in split_df.iterrows():
-        # Split the positive_labels by comma
-        labels = row['positive_labels'].split(',')
-        
-        # For each label, create the desired string and append to the output list
-        for label in labels:
-            total_ytfiles.append(f"{csvDownloader.machine_to_display_mapping[label]}/{row['YTID']}_{row['start_seconds']}-{row['end_seconds']}.wav")
-    end : float = time.time()
-    print(f"Total time to filter out YTIDs: {end - start}")
-
-    print(f"Total number of files to download: {len(total_ytfiles)}")
-
     # # already_downloaded_from_split : list[str] = chosen_df["YTID"]()
-    # filtered_split_df : pd.DataFrame = split_df[~split_df["YTID"].isin(existing_ytids) & ~split_df["YTID"].isin(excluded_files)]
+    filtered_split_df : pd.DataFrame = split_df[~split_df["YTID"].isin(existing_ytids) & ~split_df["YTID"].isin(excluded_files)]
     # assert len(filtered_split_df) + len(existing_ytids) + len(excluded_files) == len(split_df), "Length of filtered dataframe plus existing files should sum up to original length of split dataframe"
 
     # print(f"Found {len(excluded_files)} file exclusions")
     # print(f"Downloading {len(filtered_split_df)} files")
     # self, num_jobs : int, metadata_df: pd.DataFrame, class_labels_df : pd.DataFrame, download_dir: Path, sleep_amount: int
-    # multi_part_downloader: MultiPartDownloader = MultiPartDownloader(
-    #     args.n_jobs, filtered_split_df, class_mapping_df, split_dir,
-    #     args.sleep_amount, current_download_info_dir, len(split_df), excluded_files, existing_ytids
-    # )
+    multi_part_downloader: MultiPartDownloader = MultiPartDownloader(
+        args.n_jobs, filtered_split_df, class_mapping_df, split_dir,
+        args.sleep_amount, current_download_info_dir, len(split_df), excluded_files, existing_ytids
+    )
 
-    # multi_part_downloader.init_multipart_download()
+    multi_part_downloader.init_multipart_download()

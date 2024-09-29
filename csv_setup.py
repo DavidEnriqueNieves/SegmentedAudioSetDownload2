@@ -47,7 +47,7 @@ class CsvDownloader:
 
         self.cache_dir: Path = cache_dir
 
-    def load_segment_csv_url(self) -> pd.DataFrame:
+    def load_segment_csv_url(self, n_splits : int, split_idx : int, dataset_nrows : int) -> pd.DataFrame:
         """Downloads the segment URL based off the 'download_type' and foregoes the download if the metadata is present in the cache directory"""
         print("Loading metadata CSV...")
         if not self.segments_file.exists():
@@ -77,10 +77,15 @@ class CsvDownloader:
         else:
 
             start : float = time.time()
+            # we only need to load the split part of the CSV
+            # means loading only rows from 1 + split_idx * dataset_nrows to 1 + (split_idx + 1) * dataset_nrows
+
+            start_idx : int = 3 + split_idx * int(dataset_nrows / n_splits)
             self.metadata: pd.DataFrame = pd.read_csv(
                 str(self.segments_file),
                 sep="|",
-                skiprows=3,
+                skiprows= start_idx,
+                nrows=int(dataset_nrows / n_splits),
                 header=None,
                 names=["YTID", "start_seconds", "end_seconds", "positive_labels"],
                 engine="python",

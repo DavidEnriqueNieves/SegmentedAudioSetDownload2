@@ -4,6 +4,7 @@ import yt_dlp
 import shutil
 import time
 import traceback
+from yt_dlp.utils import YoutubeDLError
 
 """
 Script for definining mostly static functions for downloading youtube videos using youtube-dlp
@@ -62,16 +63,9 @@ def download_audio_section(
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             retcode: int = ydl.download([url])
-
-            if len(dwnld_paths) > 1:
-                for path in dwnld_paths[1:]:
-                    shutil.copy(
-                        dwnld_paths[0].with_suffix(f".{codec_type}"),
-                        path.with_suffix(f".{codec_type}"),
-                    )
             return (retcode, None)
 
-        except Exception as e:
+        except YoutubeDLError as e:
             # raise e
             ex = e
             # traceback.print_exc()
