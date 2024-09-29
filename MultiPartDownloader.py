@@ -46,6 +46,8 @@ class MultiPartDownloader:
         self.start_excluded_files: list[str] = excluded_files
         self.total_num_files: int = total_num_files
 
+        self.last_update_total : int = 0
+
         # since each row in the metdata_df object has a set of positive labels
         # with the machine labels, we have to use this to map the machine labels
         # to the display labels
@@ -120,12 +122,13 @@ class MultiPartDownloader:
                     f.write("\n".join(self.start_excluded_files) + "\n".join(errored_ids))
 
                 # print(f"{len(downloaded_ids)=}")
-                pbar.n = len(downloaded_ids) + len(errored_ids) + len(self.start_existing_files) + len(self.start_excluded_files)
-                pbar.refresh()
+                current_total : int = len(downloaded_ids) + len(errored_ids) + len(self.start_existing_files) + len(self.start_excluded_files)
+                pbar.update(current_total - self.last_update_total)
+                self.last_update_total = current_total
                 
                 # print(f"{len(downloaded_ids) + len(errored_ids)=}")
                 pbar.set_postfix(
-                    {"Downloaded": len(downloaded_ids) + len(self.start_existing_files), "Errored": len(errored_ids)}
+                    {"Downloaded": len(downloaded_ids) + len(self.start_existing_files), "Errored": len(errored_ids), "Excluded" : len(self.start_excluded_files), "Existing" : len(self.start_existing_files)}
                 )
                 time.sleep(1)
 

@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, Namespace
+import time
 import yt_dlp
 import subprocess
 from subprocess import CompletedProcess
@@ -59,6 +60,15 @@ def get_existing_ytids(split_dir: Path) -> list[str]:
     return existing_ytids
 
 
+def get_excluded_ytids(exclusion_ids_file) -> list[str]:
+    if not exclusion_ids_file.exists():
+        print(f"Creating {exclusion_ids_file}")
+        exclusion_ids_file.touch()
+
+    with open(str(exclusion_ids_file), "r") as f:
+        excluded_files: list[str] = f.readlines()
+    return excluded_files
+
 if __name__ == "__main__":
 
     argparser: ArgumentParser = ArgumentParser()
@@ -116,12 +126,7 @@ if __name__ == "__main__":
     # Read the exclusions file
     exclusion_ids_file: Path = Path(args.exclusion_ids_file)
 
-    if not exclusion_ids_file.exists():
-        print(f"Creating {exclusion_ids_file}")
-        exclusion_ids_file.touch()
-
-    with open(str(exclusion_ids_file), "r") as f:
-        excluded_files: list[str] = f.readlines()
+    excluded_files = get_excluded_ytids(exclusion_ids_file)
     
     print(f"Found {len(excluded_files)} file exclusions")
 
@@ -141,15 +146,33 @@ if __name__ == "__main__":
         f.write("\n".join(existing_ytids))
     
     print("Filtering out for already downloaded YTIds")
-    # already_downloaded_from_split : list[str] = chosen_df["YTID"]()
-    filtered_split_df : pd.DataFrame = split_df[~split_df["YTID"].isin(existing_ytids) & ~split_df["YTID"].isin(excluded_files)]
-    # assert len(filtered_split_df) + len(existing_ytids) == len(split_df), "Length of filtered dataframe plus existing files should sum up to original length of split dataframe"
-    print(f"Found {len(excluded_files)} file exclusions")
-    print(f"Downloading {len(filtered_split_df)} files")
-    # self, num_jobs : int, metadata_df: pd.DataFrame, class_labels_df : pd.DataFrame, download_dir: Path, sleep_amount: int
-    multi_part_downloader: MultiPartDownloader = MultiPartDownloader(
-        args.n_jobs, filtered_split_df, class_mapping_df, split_dir,
-        args.sleep_amount, current_download_info_dir, len(split_df), excluded_files, existing_ytids
-    )
 
-    multi_part_downloader.init_multipart_download()
+    total_ytfiles : list[str] = []
+
+    # Iterate through each row in the dataframe
+    start : float = time.time()
+    for index, row in split_df.iterrows():
+        # Split the positive_labels by comma
+        labels = row['positive_labels'].split(',')
+        
+        # For each label, create the desired string and append to the output list
+        for label in labels:
+            total_ytfiles.append(f"{csvDownloader.machine_to_display_mapping[label]}/{row['YTID']}_{row['start_seconds']}-{row['end_seconds']}.wav")
+    end : float = time.time()
+    print(f"Total time to filter out YTIDs: {end - start}")
+
+    print(f"Total number of files to download: {len(total_ytfiles)}")
+
+    # # already_downloaded_from_split : list[str] = chosen_df["YTID"]()
+    # filtered_split_df : pd.DataFrame = split_df[~split_df["YTID"].isin(existing_ytids) & ~split_df["YTID"].isin(excluded_files)]
+    # assert len(filtered_split_df) + len(existing_ytids) + len(excluded_files) == len(split_df), "Length of filtered dataframe plus existing files should sum up to original length of split dataframe"
+
+    # print(f"Found {len(excluded_files)} file exclusions")
+    # print(f"Downloading {len(filtered_split_df)} files")
+    # self, num_jobs : int, metadata_df: pd.DataFrame, class_labels_df : pd.DataFrame, download_dir: Path, sleep_amount: int
+    # multi_part_downloader: MultiPartDownloader = MultiPartDownloader(
+    #     args.n_jobs, filtered_split_df, class_mapping_df, split_dir,
+    #     args.sleep_amount, current_download_info_dir, len(split_df), excluded_files, existing_ytids
+    # )
+
+    # multi_part_downloader.init_multipart_download()
