@@ -159,7 +159,7 @@ if __name__ == "__main__":
     # self, num_jobs : int, metadata_df: pd.DataFrame, class_labels_df : pd.DataFrame, download_dir: Path, sleep_amount: int
     multi_part_downloader: MultiPartDownloader = MultiPartDownloader(
         args.n_jobs, filtered_split_df, class_mapping_df, split_dir,
-        args.sleep_amount, current_download_info_dir, len(split_df), excluded_files, existing_ytids
+        args.sleep_amount, current_download_info_dir, len(split_df), list(excluded_files), list(existing_ytids)
     )
 
     multi_part_downloader.init_multipart_download()
